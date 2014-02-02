@@ -1,0 +1,47 @@
+require 'opera-contacts'
+require 'ldif'
+
+def usage(extra=false)
+  puts(extra + "\n\n") if extra
+  puts("Usage: opera-to-thunderbird <input contacts file> <output-file.vcard>")
+  puts("e.g. opera-to-thunderbird contacts.adr contacts.vcf")
+  exit(1)
+end
+def get_files
+  usage if (ARGV.size != 2) || (["-h", "--help"].include? ARGV[0])
+  usage("Your input file doesn't exist.") if !File.file?(ARGV[0])
+  return ARGV
+end
+
+# Parse the input file
+(input_filename, output_filename) = get_files
+input = File.open(input_filename, "r:UTF-8").read
+parsed = OperaContacts.parse_s(input)
+
+# Extract all contacts
+all_contacts = parsed.contacts
+folders_stack = parsed.folders.reject{|f| f.name == "Trash"}
+while folders_stack != []
+  folder = folders_stack.shift
+  all_contacts.concat folder.contacts
+  folders_stack.concat folder.folders
+end
+
+# Write the contacts out
+output = File.open(output_filename, "w:UTF-8")
+all_contacts.each do |contact|
+  rec = ThunderbirdLDIF::Record.new
+  rec.name = contact.name
+  rec.phone = contact.phone if contact.phone
+  rec.mobile = contact.fax if contact.fax
+  rec.primary_email = contact.emails[0] if contact.emails
+  rec.other_emails = contact.emails[1..-1] if contact.emails
+  rec.address = contact.postal_address
+  rec.description = contact.description
+
+  output.puts rec
+end
+
+output.close
+
+# vim: ft=ruby et sw=2 ts=2 sts=2
